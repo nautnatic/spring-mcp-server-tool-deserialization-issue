@@ -1,0 +1,8 @@
+spring:
+  ai:
+    mcp:
+      server:
+        protocol: streamable
+        type: sync
+        base-url: http://localhost:8080/mcp
+        request-timeout: 200s
