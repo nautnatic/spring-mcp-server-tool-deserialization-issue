@@ -1,44 +1,55 @@
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.core.type.TypeReference
-import com.test.JacksonObjectMapper
-import com.test.Person
+import com.fasterxml.jackson.databind.exc.InvalidDefinitionException
+import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.test.KotlinPerson
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.ExtendWith
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.ContextConfiguration
-import org.springframework.test.context.junit.jupiter.SpringExtension
-import java.time.Instant
-import kotlin.test.assertTrue
+import org.junit.jupiter.api.assertThrows
 
-@ExtendWith(SpringExtension::class)
-@ContextConfiguration(classes = [JacksonObjectMapper::class])
 class CustomJacksonObjectMapperTest {
-
-    @Autowired
-    private lateinit var mapper: ObjectMapper
-
-    // class to deserialize into / serialize from
-    data class Sample(val start: Instant)
-    
-    @Test
-    fun `should deserialize Kotlin data classes`() {
-        // given
-        val json = """
+    val json = """
             [
               {"name":"user","age":1},
               {"name":"user3","age":2}
             ]
         """.trimIndent()
+    val typeRef = object : TypeReference<List<KotlinPerson>>() {}
 
-        // when
-        val typeRef = object : TypeReference<List<Person>>() {}
-        val messages: List<Person> = mapper.readValue(json, typeRef)
+    /**
+     * This test works for me and shows that the Jackson deserialization of Kotlin data classes works per se
+     */
+    @Test
+    fun readValue_shouldDeserializationOfKotlinDataClasses_ifJacksonKotlinModuleIsRegistered() {
+        // this uses a Jackson ObjectMapper that is configured with the Kotlin module
+        val objectMapper = jacksonObjectMapper()
 
-        // then
+        val messages: List<KotlinPerson> = objectMapper.readValue(json, typeRef)
+
+        // asserts
         assertTrue { messages.size == 2 }
-        assertEquals(Person(name = "user", age = 1), messages[0])
-        assertEquals(Person(name = "user3", age = 2), messages[1])
+        assertEquals(KotlinPerson(name = "user", age = 1), messages[0])
+        assertEquals(KotlinPerson(name = "user3", age = 2), messages[1])
+    }
+
+    /**
+     * This test throws the same issue as the MCP tool with the Kotlin data class parameter, indicating that the Kotlin module is not registered correctly.
+     */
+    @Test
+    fun readValue_shouldFailOnDeserializationOfKotlinDataClasses_ifJacksonKotlinModuleIsNotRegistered() {
+        // this uses a Jackson ObjectMapper that is configured with the Kotlin module
+        val objectMapper = JsonMapper()
+
+        val exception = assertThrows<InvalidDefinitionException> {
+            objectMapper.readValue(json, typeRef)
+        }
+
+        val errorMessage = """
+        Cannot construct instance of `com.test.KotlinPerson` (no Creators, like default constructor, exist): cannot deserialize from Object value (no delegate- or property-based Creator)
+         at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 2, column: 4] (through reference chain: java.util.ArrayList[0])
+        """.trimIndent()
+
+        assertEquals(errorMessage, exception.message)
     }
 }
